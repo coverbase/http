@@ -1,0 +1,6 @@
+{
+	"editor.defaultFormatter": "biomejs.biome",
+	"conventionalCommits.gitmoji": false,
+	"conventionalCommits.promptBody": false,
+	"conventionalCommits.promptScopes": false
+}
