@@ -15,9 +15,7 @@ export type CookieOptions = {
 export const fromCookieString = (cookies: string) => {
 	const cookie: Record<string, string> = {};
 
-	for (let [name, value] of cookies
-		.split(";")
-		.map((pair) => pair.trim().split("="))) {
+	for (let [name, value] of cookies.split(";").map((pair) => pair.trim().split("="))) {
 		value = value.trim();
 
 		if (value.startsWith('"') && value.endsWith('"')) {
@@ -32,11 +30,7 @@ export const fromCookieString = (cookies: string) => {
 	return cookie;
 };
 
-export const toCookieString = (
-	name: string,
-	value: string,
-	options?: CookieOptions,
-) => {
+export const toCookieString = (name: string, value: string, options?: CookieOptions) => {
 	let cookie = `${name}=${value}`;
 
 	if (options) {

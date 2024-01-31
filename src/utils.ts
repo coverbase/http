@@ -2,11 +2,7 @@ import { getQuery } from "ufo";
 import { type Context } from "./app";
 import { fromCookieString, toCookieString, type CookieOptions } from "./cookie";
 
-export const sendJson = <T, V>(
-	context: Context<T>,
-	value: V,
-	status: number = 200,
-) => {
+export const sendJson = <T, V>(context: Context<T>, value: V, status: number = 200) => {
 	setHeader(context, "Content-Type", "application/json");
 
 	return new Response(JSON.stringify(value), {
@@ -15,11 +11,7 @@ export const sendJson = <T, V>(
 	});
 };
 
-export const sendText = <T>(
-	context: Context<T>,
-	text: string,
-	status: number = 200,
-) => {
+export const sendText = <T>(context: Context<T>, text: string, status: number = 200) => {
 	setHeader(context, "Content-Type", "text/plain");
 
 	return new Response(text, {
@@ -28,11 +20,7 @@ export const sendText = <T>(
 	});
 };
 
-export const sendRedirect = <T>(
-	context: Context<T>,
-	location: string,
-	status: 301 | 302 = 302,
-) => {
+export const sendRedirect = <T>(context: Context<T>, location: string, status: 301 | 302 = 302) => {
 	setHeader(context, "Location", location);
 
 	return new Response(null, {
@@ -67,35 +55,21 @@ export const getRequestHeaders = <T>(context: Context<T>) => {
 	);
 };
 
-export const setHeader = <T>(
-	context: Context<T>,
-	name: string,
-	value: string,
-) => {
+export const setHeader = <T>(context: Context<T>, name: string, value: string) => {
 	context.set.headers.set(name, value);
 };
 
-export const setHeaders = <T>(
-	context: Context<T>,
-	headers: Record<string, string>,
-) => {
+export const setHeaders = <T>(context: Context<T>, headers: Record<string, string>) => {
 	for (const key in headers) {
 		context.set.headers.set(key, headers[key]);
 	}
 };
 
-export const addHeader = <T>(
-	context: Context<T>,
-	name: string,
-	value: string,
-) => {
+export const addHeader = <T>(context: Context<T>, name: string, value: string) => {
 	context.set.headers.append(name, value);
 };
 
-export const addHeaders = <T>(
-	context: Context<T>,
-	headers: Record<string, string>,
-) => {
+export const addHeaders = <T>(context: Context<T>, headers: Record<string, string>) => {
 	for (const key in headers) {
 		context.set.headers.append(key, headers[key]);
 	}
@@ -116,11 +90,7 @@ export const setCookie = <T>(
 	addHeader(context, "Set-Cookie", toCookieString(name, value, options));
 };
 
-export const deleteCookie = <T>(
-	context: Context<T>,
-	name: string,
-	options?: CookieOptions,
-) => {
+export const deleteCookie = <T>(context: Context<T>, name: string, options?: CookieOptions) => {
 	setCookie(context, name, "", {
 		...options,
 		maxAge: 0,

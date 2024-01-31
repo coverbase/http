@@ -1,4 +1,4 @@
-import { Radix } from "@coverbase/radix";
+import { Radix, combineRadix } from "@coverbase/radix";
 import { sendText } from "./utils";
 
 export type HttpMethod =
@@ -22,9 +22,7 @@ export type Context<T, P extends string = string> = T & {
 	set: Set;
 };
 
-export type Handle<TContext, TOutput> = (
-	context: TContext,
-) => TOutput | Promise<TOutput>;
+export type Handle<TContext, TOutput> = (context: TContext) => TOutput | Promise<TOutput>;
 
 export class HttpError extends Error {
 	readonly status: number;
@@ -37,12 +35,12 @@ export class HttpError extends Error {
 }
 
 export class App<T> {
+	matcher: Radix<Handle<Context<T>, Response>>;
 	readonly beforeHandle: Array<Handle<Context<T>, void | Response>>;
-	readonly matcher: Radix<Handle<Context<T>, Response>>;
 
 	constructor() {
-		this.beforeHandle = [];
 		this.matcher = new Radix();
+		this.beforeHandle = [];
 	}
 
 	use = <C>(app: App<C>) => {
@@ -50,7 +48,7 @@ export class App<T> {
 		this.beforeHandle.concat(app.beforeHandle);
 
 		// @ts-ignore
-		this.matcher.merge(app.matcher);
+		this.matcher = combineRadix(this.matcher, app.matcher);
 
 		return this as App<T & C>;
 	};
@@ -83,52 +81,31 @@ export class App<T> {
 		return this;
 	};
 
-	get = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	get = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("GET", path, handle);
 	};
 
-	head = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	head = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("HEAD", path, handle);
 	};
 
-	post = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	post = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("POST", path, handle);
 	};
 
-	put = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	put = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("PUT", path, handle);
 	};
 
-	delete = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	delete = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("DELETE", path, handle);
 	};
 
-	connect = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	connect = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("CONNECT", path, handle);
 	};
 
-	options = <P extends string>(
-		path: P,
-		handle: Handle<Context<T, P>, Response>,
-	) => {
+	options = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
 		return this.route("OPTIONS", path, handle);
 	};
 }
@@ -162,13 +139,12 @@ export const webHandler = async <T>(
 			}
 		}
 
-		const handle = app.matcher.match(
-			request.method + new URL(request.url).pathname,
-			httpContext.parameters,
-		);
+		const match = app.matcher.match(request.method + new URL(request.url).pathname);
 
-		if (handle) {
-			return await handle(httpContext);
+		if (match) {
+			httpContext.parameters = match.parameters;
+
+			return await match.value(httpContext);
 		}
 	} catch (error) {
 		if (error instanceof HttpError) {
