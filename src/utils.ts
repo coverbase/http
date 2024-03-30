@@ -1,8 +1,13 @@
+import {
+    parse as parseCookie,
+    serialize,
+    type CookieParseOptions,
+    type CookieSerializeOptions,
+} from "cookie-es";
 import { getQuery } from "ufo";
-import { type Context } from "./app";
-import { fromCookieString, toCookieString, type CookieOptions } from "./cookie";
+import type { Context } from "./app";
 
-export const sendJson = <T, V>(context: Context<T>, value: V, status: number = 200) => {
+export const sendJson = <T>(context: Context<T>, value: any, status: number = 200): Response => {
     setHeader(context, "Content-Type", "application/json");
 
     return new Response(JSON.stringify(value), {
@@ -11,7 +16,7 @@ export const sendJson = <T, V>(context: Context<T>, value: V, status: number = 2
     });
 };
 
-export const sendText = <T>(context: Context<T>, text: string, status: number = 200) => {
+export const sendText = <T>(context: Context<T>, text: string, status: number = 200): Response => {
     setHeader(context, "Content-Type", "text/plain");
 
     return new Response(text, {
@@ -20,7 +25,11 @@ export const sendText = <T>(context: Context<T>, text: string, status: number = 
     });
 };
 
-export const sendRedirect = <T>(context: Context<T>, location: string, status: 301 | 302 = 302) => {
+export const sendRedirect = <T>(
+    context: Context<T>,
+    location: string,
+    status: 301 | 302 = 302,
+): Response => {
     setHeader(context, "Location", location);
 
     return new Response(null, {
@@ -29,7 +38,7 @@ export const sendRedirect = <T>(context: Context<T>, location: string, status: 3
     });
 };
 
-export const sendNoContent = <T>(context: Context<T>) => {
+export const sendNoContent = <T>(context: Context<T>): Response => {
     return new Response(null, {
         status: 204,
         headers: context.set.headers,
@@ -75,22 +84,26 @@ export const addHeaders = <T>(context: Context<T>, headers: Record<string, strin
     }
 };
 
-export const getCookies = <T>(context: Context<T>) => {
+export const getCookies = <T>(context: Context<T>, options?: CookieParseOptions) => {
     const cookies = getRequestHeader(context, "Cookie");
 
-    return cookies ? fromCookieString(cookies) : {};
+    return cookies ? parseCookie(cookies, options) : {};
 };
 
 export const setCookie = <T>(
     context: Context<T>,
     name: string,
     value: string,
-    options?: CookieOptions,
+    options?: CookieSerializeOptions,
 ) => {
-    addHeader(context, "Set-Cookie", toCookieString(name, value, options));
+    addHeader(context, "Set-Cookie", serialize(name, value, options));
 };
 
-export const deleteCookie = <T>(context: Context<T>, name: string, options?: CookieOptions) => {
+export const deleteCookie = <T>(
+    context: Context<T>,
+    name: string,
+    options?: CookieSerializeOptions,
+) => {
     setCookie(context, name, "", {
         ...options,
         maxAge: 0,

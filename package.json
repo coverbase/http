@@ -1,6 +1,6 @@
 {
     "name": "@coverbase/http",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "type": "module",
     "exports": {
         ".": {
@@ -22,7 +22,8 @@
         "typescript": "^5.0.0"
     },
     "dependencies": {
-        "@coverbase/radix": "^0.0.3",
+        "cookie-es": "^1.1.0",
+        "defu": "^6.1.4",
         "ufo": "^1.3.2"
     }
 }

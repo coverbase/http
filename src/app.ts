@@ -1,158 +1,159 @@
-import { Radix, combineRadix } from "@coverbase/radix";
 import { sendText } from "./utils";
 
-export type HttpMethod =
-    | (string & {})
-    | "GET"
-    | "HEAD"
-    | "POST"
-    | "PUT"
-    | "DELETE"
-    | "CONNECT"
-    | "OPTIONS"
-    | "PATCH";
+export type Method = "GET" | "HEAD" | "POST" | "PUT" | "DELETE" | "CONNECT" | "OPTIONS";
 
 export type Set = {
     headers: Headers;
 };
 
-export type Context<T, P extends string = string> = T & {
+export type Context<T> = T & {
     request: Request;
     parameters: Record<string, string>;
     set: Set;
 };
 
-export type Handle<TContext, TOutput> = (context: TContext) => TOutput | Promise<TOutput>;
+export type Handle<T> = (context: Context<T>) => Response | Promise<Response>;
 
-export class HttpError extends Error {
-    readonly status: number;
+export type Middleware<T> = (context: Context<T>, next: Handle<T>) => Response | Promise<Response>;
 
-    constructor(message: string, status: number) {
-        super(message);
+export class Route<T> {
+    value?: Handle<T>;
+    parameter?: string;
+    children: Record<string, Route<T>>;
 
-        this.status = status;
+    constructor(parameter?: string) {
+        this.parameter = parameter;
+        this.children = {};
     }
+
+    insert = (key: string, value: Handle<T>) => {
+        let node: Route<T> = this;
+
+        for (const segment of key.split("/")) {
+            const isParameter = segment.startsWith(":");
+            const path = isParameter ? ":" : segment;
+
+            let childNode = node.children[path];
+
+            if (childNode === undefined) {
+                childNode = isParameter ? new Route<T>(segment.substring(1)) : new Route<T>();
+
+                node.children[path] = childNode;
+            }
+
+            node = childNode;
+        }
+
+        node.value = value;
+    };
+
+    match = (key: string) => {
+        let node: Route<T> = this;
+        const parameters: Record<string, string> = {};
+
+        for (const segment of key.split("/")) {
+            node = node.children[segment] ?? node.children[":"];
+
+            if (node?.parameter) {
+                parameters[node.parameter] = segment;
+            }
+        }
+
+        if (node?.value) {
+            return {
+                value: node.value,
+                parameters,
+            };
+        }
+    };
 }
 
 export class App<T> {
-    matcher: Radix<Handle<Context<T>, Response>>;
-    readonly beforeHandle: Array<Handle<Context<T>, void | Response>>;
+    readonly rootNode: Route<T>;
+    readonly middleware: Array<Middleware<T>>;
 
     constructor() {
-        this.matcher = new Radix();
-        this.beforeHandle = [];
+        this.rootNode = new Route();
+
+        this.middleware = [
+            (context, next) => {
+                try {
+                    return next(context);
+                } catch (error) {
+                    if (error instanceof Error) {
+                        return sendText(context, error.message, 400);
+                    }
+
+                    return sendText(context, "Bad Request", 400);
+                }
+            },
+        ];
     }
 
-    use = <C>(app: App<C>) => {
-        // @ts-ignore
-        this.beforeHandle.concat(app.beforeHandle);
-
-        // @ts-ignore
-        this.matcher = combineRadix(this.matcher, app.matcher);
-
-        return this as App<T & C>;
-    };
-
-    before = (handle: Handle<Context<T>, void | Response>) => {
-        this.beforeHandle.push(handle);
-
+    use = (middleware: Middleware<T>) => {
+        this.middleware.push(middleware);
         return this;
     };
 
-    route = <P extends string>(
-        method: HttpMethod,
-        path: P,
-        handle: Handle<Context<T, P>, Response>,
-    ) => {
-        this.matcher.insert(method + path, handle);
-
+    route = (method: Method, path: string, handle: Handle<T>) => {
+        this.rootNode.insert(`${method}/${path}`, handle);
         return this;
     };
 
-    on = <P extends string>(
-        methods: Array<HttpMethod>,
-        path: P,
-        handle: Handle<Context<T, P>, Response>,
-    ) => {
-        for (const method of methods) {
-            this.route(method, path, handle);
-        }
-
-        return this;
-    };
-
-    get = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    get = (path: string, handle: Handle<T>) => {
         return this.route("GET", path, handle);
     };
 
-    head = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    head = (path: string, handle: Handle<T>) => {
         return this.route("HEAD", path, handle);
     };
 
-    post = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    post = (path: string, handle: Handle<T>) => {
         return this.route("POST", path, handle);
     };
 
-    put = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    put = (path: string, handle: Handle<T>) => {
         return this.route("PUT", path, handle);
     };
 
-    delete = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    delete = (path: string, handle: Handle<T>) => {
         return this.route("DELETE", path, handle);
     };
 
-    connect = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    connect = (path: string, handle: Handle<T>) => {
         return this.route("CONNECT", path, handle);
     };
 
-    options = <P extends string>(path: P, handle: Handle<Context<T, P>, Response>) => {
+    options = (path: string, handle: Handle<T>) => {
         return this.route("OPTIONS", path, handle);
     };
 }
 
-export const createError = (message: string, status: number): HttpError => {
-    return new HttpError(message, status);
-};
+export const webHandler = <T>(app: App<T>, request: Request, context: T): Promise<Response> => {
+    const url = new URL(request.url);
 
-export const webHandler = async <T>(
-    app: App<T>,
-    request: Request,
-    context: T,
-): Promise<Response> => {
     const httpContext: Context<T> = {
-        request: request,
+        request,
         parameters: {},
-
-        set: {
-            headers: new Headers() as Headers,
-        },
-
+        set: { headers: new Headers() as Headers },
         ...context,
     };
 
-    try {
-        for (const handle of app.beforeHandle) {
-            const response = await handle(httpContext);
+    const invoke = async (index: number): Promise<Response> => {
+        if (index >= app.middleware.length) {
+            const route = app.rootNode.match(`${request.method}/${url.pathname}`);
 
-            if (response) {
-                return response;
+            if (route) {
+                httpContext.parameters = route.parameters;
+
+                return await route.value(httpContext);
             }
+
+            return sendText(httpContext, "Not Found", 404);
         }
 
-        const match = app.matcher.match(request.method + new URL(request.url).pathname);
+        return app.middleware[index](httpContext, () => invoke(index + 1));
+    };
 
-        if (match) {
-            httpContext.parameters = match.parameters;
-
-            return await match.value(httpContext);
-        }
-    } catch (error) {
-        if (error instanceof HttpError) {
-            return sendText(httpContext, error.message, error.status);
-        }
-
-        throw error;
-    }
-
-    return sendText(httpContext, "Not Found", 404);
+    return invoke(0);
 };
